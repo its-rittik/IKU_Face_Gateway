@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Face Verification for IKU Portal Access</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Face Verification for IKU Portal Access</h1>
+      <p class="subtitle">
+        Please remove sunglasses, eyeglasses, mask, or cap if any.
+      </p>
+
+      <div class="video-wrapper">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+
+      <div id="loader" class="loader" style="display: none">
+        <div id="loaderBar" class="loader-bar"></div>
+      </div>
+
+      <div id="status" class="status"></div>
+      <button id="verifyBtn" class="verify-btn">Verify Face</button>
+      <div id="result" class="result"></div>
+    </div>
+
+    <script>
+      const video = document.getElementById("video");
+      const overlay = document.getElementById("overlay");
+      const verifyBtn = document.getElementById("verifyBtn");
+      const loader = document.getElementById("loader");
+      const loaderBar = document.getElementById("loaderBar");
+      const status = document.getElementById("status");
+
+      const BOX_WIDTH = 320;
+      const BOX_HEIGHT = 320;
+      let images = [];
+      let audioBlob = null;
+
+      navigator.mediaDevices
+        .getUserMedia({ video: true, audio: false })
+        .then((stream) => {
+          video.srcObject = stream;
+          video.onloadedmetadata = () => {
+            video.play();
+            drawOverlay();
+          };
+        });
+
+      function drawOverlay() {
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+        const ctx = overlay.getContext("2d");
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+        const x = (overlay.width - BOX_WIDTH) / 2;
+        const y = (overlay.height - BOX_HEIGHT) / 2;
+        ctx.strokeStyle = "#00FF00";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x, y, BOX_WIDTH, BOX_HEIGHT);
+        requestAnimationFrame(drawOverlay);
+      }
+
+      function setLoaderProgress(percent) {
+        loaderBar.style.width = percent + "%";
+      }
+
+      async function captureImages() {
+        images = [];
+        status.innerText = "Capturing images...";
+        loader.style.display = "block";
+        setLoaderProgress(0);
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        const sx = Math.floor((vw - BOX_WIDTH) / 2);
+        const sy = Math.floor((vh - BOX_HEIGHT) / 2);
+        for (let i = 0; i < 15; i++) {
+          await new Promise((res) => setTimeout(res, 120));
+          const canvas = document.createElement("canvas");
+          canvas.width = BOX_WIDTH;
+          canvas.height = BOX_HEIGHT;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(
+            video,
+            sx,
+            sy,
+            BOX_WIDTH,
+            BOX_HEIGHT,
+            0,
+            0,
+            BOX_WIDTH,
+            BOX_HEIGHT
+          );
+          images.push(
+            await new Promise((done) => canvas.toBlob(done, "image/jpeg", 0.95))
+          );
+          setLoaderProgress(((i + 1) / 15) * 100);
+        }
+        loader.style.display = "none";
+        status.innerText = "Capturing audio...";
+      }
+
+      async function captureAudio() {
+        return new Promise(async (resolve, reject) => {
+          try {
+            console.log('Starting audio capture...');
+            loader.style.display = 'block';
+            setLoaderProgress(0);
+
+            console.log('Requesting audio stream...');
+            const audioStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                channelCount: 1,
+                sampleRate: 22050
+              }
+            });
+            console.log('Audio stream obtained:', audioStream.getAudioTracks()[0].label);
+
+            const mimeTypes = [
+              'audio/webm;codecs=opus',
+              'audio/ogg;codecs=opus',
+              'audio/webm',
+              'audio/ogg',
+              'audio/mp4'
+            ];
+
+            let mediaRecorder = null;
+            let chosenMime = null;
+
+            for (const mimeType of mimeTypes) {
+              if (MediaRecorder.isTypeSupported(mimeType)) {
+                console.log('Using MIME type:', mimeType);
+                chosenMime = mimeType;
+                try {
+                  mediaRecorder = new MediaRecorder(audioStream, {
+                    mimeType: mimeType,
+                    audioBitsPerSecond: 128000
+                  });
+                  break;
+                } catch (e) {
+                  console.warn('Failed to create MediaRecorder with', mimeType, e);
+                }
+              }
+            }
+
+            if (!mediaRecorder) {
+              throw new Error('No supported audio MIME types found');
+            }
+
+            const chunks = [];
+            const duration = 5000;  // 5 seconds
+            const start = Date.now();
+
+            mediaRecorder.ondataavailable = (e) => {
+              console.log('Data available:', e.data.size, 'bytes');
+              if (e.data && e.data.size > 0) {
+                chunks.push(e.data);
+              }
+            };
+
+            mediaRecorder.onstop = () => {
+              console.log('MediaRecorder stopped. Chunks collected:', chunks.length);
+              if (chunks.length > 0) {
+                audioBlob = new Blob(chunks, { type: chosenMime });
+                console.log('Audio captured successfully. Size:', audioBlob.size, 'Type:', audioBlob.type);
+                loader.style.display = 'none';
+                setLoaderProgress(0);
+                resolve();
+              } else {
+                console.error('No audio data captured');
+                reject(new Error('No audio data captured'));
+              }
+            };
+
+            mediaRecorder.onerror = (event) => {
+              console.error('MediaRecorder error:', event);
+              reject(new Error('Audio recording failed'));
+            };
+
+            console.log('Starting MediaRecorder...');
+            mediaRecorder.start(100);
+
+            const interval = setInterval(() => {
+              let elapsed = Date.now() - start;
+              setLoaderProgress(Math.min(100, (elapsed/duration)*100));
+            }, 50);
+
+            setTimeout(() => {
+              console.log('Recording duration complete');
+              clearInterval(interval);
+              if (mediaRecorder.state === 'recording') {
+                console.log('Stopping MediaRecorder...');
+                mediaRecorder.stop();
+              }
+              audioStream.getTracks().forEach(track => {
+                console.log('Stopping audio track:', track.label);
+                track.stop();
+              });
+            }, duration);
+
+          } catch (err) {
+            console.error('Audio capture error:', err);
+            loader.style.display = 'none';
+            setLoaderProgress(0);
+            reject(err);
+          }
+        });
+      }
+
+      async function sendData() {
+        status.innerText = 'Uploading...';
+        loader.style.display = 'block';
+        setLoaderProgress(100);
+        const formData = new FormData();
+        images.forEach((img, i) => formData.append('images', img, `image${i+1}.jpg`));
+        
+        if (!audioBlob) {
+          console.error('No audio blob available');
+          alert('Audio capture failed. Please try again.');
+          return;
+        }
+        
+        let audioExt = audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+        console.log('Adding audio to form data:', audioBlob.size, 'bytes, type:', audioBlob.type);
+        formData.append('audio', audioBlob, `audio.${audioExt}`);
+        
+        console.log('Uploading data...');
+        const response = await fetch('/', {
+          method: 'POST',
+          body: formData
+        });
+
+        loader.style.display = "none";
+        setLoaderProgress(0);
+        status.innerText = "";
+        const result = document.getElementById("result");
+
+        try {
+          const data = await response.json();
+          if (data.redirect) {
+            window.location.href = data.redirect;
+          } else if (data.error) {
+            result.innerText = data.error;
+            result.style.color = "red";
+          } else {
+            result.innerText = "";
+          }
+        } catch {
+          result.innerText = "Unexpected error occurred.";
+          result.style.color = "red";
+        }
+      }
+
+      verifyBtn.onclick = async () => {
+        verifyBtn.disabled = true;
+        try {
+          await captureImages();
+          await captureAudio();
+          await sendData();
+        } catch (e) {
+          console.error("Verification failed:", e);
+          alert("Something went wrong. Please try again.");
+        } finally {
+          verifyBtn.disabled = false;
+        }
+      };
+    </script>
+  </body>
+</html>

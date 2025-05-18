@@ -1,0 +1,104 @@
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: #f2f7fb;
+    color: #333;
+    text-align: center;
+    padding-top: 50px;
+}
+
+.container {
+    width: 100%;
+    max-width: 500px;
+    margin: auto;
+    padding: 32px 24px 32px 24px;
+    background-color: #fff;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    border-radius: 18px;
+}
+
+h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+.subtitle {
+    color: #666;
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.video-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    margin-bottom: 24px;
+}
+
+video, #overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+}
+
+#overlay {
+    pointer-events: none;
+}
+
+.verify-btn {
+    padding: 14px 32px;
+    font-size: 18px;
+    background: linear-gradient(90deg, #4f8cff, #ff6ec4);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 24px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+.verify-btn:disabled {
+    background: #b0b0b0;
+    cursor: not-allowed;
+}
+
+.loader {
+    width: 80%;
+    height: 12px;
+    background: #e0e0e0;
+    border-radius: 6px;
+    margin: 18px auto 10px auto;
+    overflow: hidden;
+    position: relative;
+    display: block;
+}
+.loader::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #4f8cff, #ff6ec4);
+    border-radius: 6px;
+    transition: width 0.2s;
+    position: absolute;
+    left: 0; top: 0;
+}
+.loader[style*="width"]::after {
+    width: inherit;
+}
+
+.loader-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #4f8cff, #ff6ec4);
+    border-radius: 6px;
+    transition: width 0.2s;
+}
+
+.status {
+    font-size: 1.1rem;
+    color: #4f8cff;
+    margin-bottom: 10px;
+    min-height: 24px;
+    font-weight: 500;
+}
